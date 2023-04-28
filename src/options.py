@@ -55,7 +55,6 @@ class Options():
         self.parser.add_argument('--no_title', action='store_true', 
                         help='article titles not included in passages')
         self.parser.add_argument('--n_context', type=int, default=10)
-        self.parser.add_argument('--from_checkpoint', type=bool, default=False)
 
     def add_retriever_options(self):
         self.parser.add_argument('--train_data', type=str, default='none', help='path of train data')
@@ -79,7 +78,6 @@ class Options():
         # basic parameters
         self.parser.add_argument('--name', type=str, default='experiment_name', help='name of the experiment')
         self.parser.add_argument('--checkpoint_dir', type=str, default='./checkpoint/', help='models are saved here')
-        self.parser.add_argument('--model_path', type=str, default='none', help='path for retraining')
         self.parser.add_argument("--device", default="cpu", type=str, help="GPU or CPU.")
 
         # log
@@ -105,7 +103,18 @@ class Options():
                         help='save model every <save_freq> steps during training')
         self.parser.add_argument('--eval_print_freq', type=int, default=1000,
                         help='print intermdiate results of evaluation every <eval_print_freq> steps')
-
+        
+        self.parser.add_argument('--model_name', type=str, default="T5",
+                        help='model name (T5, RoBERTa, BERT)')
+        
+        self.parser.add_argument('--model_size', type=str, default="base", 
+                                 help='T5: t5-small, t5-base, t5-large, t5-3b, t5-11b; \
+                                 RoBERTa: roberta-base, roberta-large; \
+                                 BERT: bert-base-uncased, bert-large-uncased')
+        
+        self.parser.add_argument('--from_checkpoint', type=bool, default=False)
+        
+        self.parser.add_argument('--model_path', type=str, default='none', help='path for retraining')
 
     def print_options(self, opt):
         message = '\n'

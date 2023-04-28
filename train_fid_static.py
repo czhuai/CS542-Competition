@@ -30,8 +30,7 @@ import src.data_multihead
 import src.model_multihead
 
 
-def train(model, optimizer, scheduler, step, train_dataset, eval_dataset, opt, collator, best_dev_em, checkpoint_path,
-          device):
+def train(model, optimizer, scheduler, step, train_dataset, eval_dataset, opt, collator, best_dev_em, checkpoint_path, device):
     if opt.log_tensorboard:
         tb_logger = SummaryWriter(Path(opt.checkpoint_dir) / opt.name)
 
@@ -386,6 +385,7 @@ def evaluate(model, dataset, tokenizer, collator, opt, epoch, device, mode='eval
 def predict(model, dataset, tokenizer, collator, opt, device):
     # TF_TOKENS = sum(tokenizer(['no', 'yes'])['input_ids'], [])
     # MC_TOKENS = sum(tokenizer([chr(i + ord('A')) for i in range(12)])['input_ids'], [])
+    
 
     sampler = SequentialSampler(dataset)
     dataloader = DataLoader(dataset,
@@ -502,6 +502,7 @@ def predict(model, dataset, tokenizer, collator, opt, device):
 
     return ans_list
 
+
 if __name__ == "__main__":
     options = Options()
     options.add_reader_options()
@@ -516,7 +517,7 @@ if __name__ == "__main__":
 
     torch.manual_seed(opt.seed)
 
-    checkpoint_path = Path(opt.checkpoint_dir) / opt.name
+    checkpoint_path = Path(opt.checkpoint_dir) / opt.model_name / opt.model_size
     checkpoint_exists = checkpoint_path.exists()
 
     checkpoint_path.mkdir(parents=True, exist_ok=True)
@@ -525,12 +526,15 @@ if __name__ == "__main__":
         filename=checkpoint_path / 'run.log'
     )
 
-    model_name = 't5-' + opt.model_size
-    model_class = src.model_multihead.FiDT5
+    if opt.model_name == 'T5':
+        model_class = transformers.T5ForConditionalGeneration
+        tokenizer = transformers.T5Tokenizer.from_pretrained(opt.model_size)
+    elif opt.model_name == 'RoBERTa':
+        model_class = transformers.RobertaModel
+        tokenizer = transformers.RobertaTokenizer.from_pretrained(opt.model_size)
 
     # load data
     opt.n_context = opt.n_context or None
-    tokenizer = transformers.T5Tokenizer.from_pretrained(model_name)
     collator = src.data_multihead.Collator(opt.text_maxlength, tokenizer,
                                            answer_maxlength=opt.answer_maxlength, n_context=opt.n_context)
 
@@ -546,17 +550,16 @@ if __name__ == "__main__":
     eval_dataset = src.data_multihead.Dataset(eval_examples, opt.n_context, over_sample=False)
 
     if not opt.from_checkpoint and opt.model_path == "none":
-        t5 = transformers.T5ForConditionalGeneration.from_pretrained(model_name, cache_dir='huggingface_cache')
-        # model = src.model_multihead.FiDT5(t5.config)
-        model = transformers.T5ForConditionalGeneration.from_pretrained(model_name, cache_dir='huggingface_cache')
-        # model.load_t5_multihead(t5.state_dict())
+        model = model_class.from_pretrained(opt.model_size, cache_dir='huggingface_cache')
         model = model.to(opt.device)
         optimizer, scheduler = src.util.set_optim(opt, model)
         step, best_dev_em = 0, 0.0
     elif opt.model_path == "none":
-        load_path = checkpoint_path / 'checkpoint' / 'latest'
-        model, optimizer, scheduler, opt_checkpoint, step, best_dev_em = \
+        # load_path = checkpoint_path / 'checkpoint' / 'latest'
+        load_path = 'latest'
+        model, _, _, opt_checkpoint, step, best_dev_em = \
             src.util.load(model_class, load_path, opt, reset_params=False)
+        optimizer, scheduler = src.util.set_optim(opt, model)
         logger.info(f"Model loaded from {load_path}")
     else:
         model, optimizer, scheduler, opt_checkpoint, step, best_dev_em = \
@@ -564,8 +567,8 @@ if __name__ == "__main__":
         logger.info(f"Model loaded from {opt.model_path}")
 
     # model.set_checkpoint(opt.use_checkpoint)
-    logger.info(f"NUM EXAMPLE {len(train_dataset)}")
-    logger.info("Start training")
+    logger.info(f"NUM EXAMPLE {len(eval_dataset)}")
+    logger.info("Start predicting")
     # train(
     #     model,
     #     optimizer,
@@ -581,8 +584,4 @@ if __name__ == "__main__":
     # )
     ans_list = predict(model, eval_dataset, tokenizer, collator, opt, device)
     ans_array = np.array(ans_list)
-    
-    
-
-    # logger.info("Start evaluating")
-    # evaluate(model, eval_dataset, tokenizer, collator, opt, 100, 'eval')
+    np.save('my_array.npy', ans_array)
