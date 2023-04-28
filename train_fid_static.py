@@ -1,3 +1,4 @@
+train_fid_static.py
 # Copyright (c) Facebook, Inc. and its affiliates.
 # All rights reserved.
 #
@@ -47,7 +48,7 @@ def train(model, optimizer, scheduler, step, train_dataset, eval_dataset, opt, c
     loss, curr_loss, curr_loss_tfmc, curr_loss_re = 0.0, 0.0, 0.0, 0.0
     model.train()
     for epoch in range(opt.epochs):
-        
+
         epoch += 1
         # train_dataloader.dataset.over_sample()
 
@@ -58,9 +59,9 @@ def train(model, optimizer, scheduler, step, train_dataset, eval_dataset, opt, c
             # (_, _, labels, indices, lengths, context_ids, context_mask) = batch
             (_, _, labels, indices, lengths, context_ids, context_mask) = batch
 
-            input_ids=context_ids.to(device)
+            input_ids = context_ids.to(device)
             input_ids = input_ids.view(input_ids.size(0), -1)
-            attention_mask=context_mask.to(device)
+            attention_mask = context_mask.to(device)
             attention_mask = attention_mask.view(attention_mask.size(0), -1)
 
             indices = indices.to(device)
@@ -119,13 +120,13 @@ def train(model, optimizer, scheduler, step, train_dataset, eval_dataset, opt, c
             # nan loss doesn't impact gradient but TODO: fix problem with logging
             loss_tfmc = loss_fn_classifier(logits_tfmc, labels_tfmc.view(-1))
             loss_re = loss_fn_regressor(results_re.view(-1, results_re.size(-1)), labels_re)
-            
+
             batch_size_tfmc = len(labels_tfmc)
             assert batch_size_tfmc + len(labels_re) == len(labels)  # sanity check
             loss = loss_tfmc + loss_re  # TODO: should we weigh them?
 
             loss.backward()
-            
+
             if step % opt.accumulation_steps == 0:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), opt.clip)
                 optimizer.step()
@@ -142,14 +143,14 @@ def train(model, optimizer, scheduler, step, train_dataset, eval_dataset, opt, c
         train_em, _ = evaluate(model, train_dataset, tokenizer, collator, opt, epoch, device, 'train')
         dev_em, _ = evaluate(model, eval_dataset, tokenizer, collator, opt, epoch, device)
         model.train()
-        
+
         if dev_em > best_dev_em:
             best_dev_em = dev_em
             # src.util.save(model, optimizer, scheduler, step, best_dev_em,
             #             opt, checkpoint_path, 'best_dev')
         log = f"{step} / {opt.total_steps} | "
-        log += f"train: {curr_loss/opt.eval_freq:.3f}; {curr_loss_tfmc/opt.eval_freq: .3f}; {curr_loss_re/opt.eval_freq: .3f} (EM: {100*train_em:.2f}) | "
-        log += f"evaluation: {100*dev_em:.2f}EM | "
+        log += f"train: {curr_loss / opt.eval_freq:.3f}; {curr_loss_tfmc / opt.eval_freq: .3f}; {curr_loss_re / opt.eval_freq: .3f} (EM: {100 * train_em:.2f}) | "
+        log += f"evaluation: {100 * dev_em:.2f}EM | "
         log += f"lr: {scheduler.get_last_lr()[0]:.5f}"
         logger.info(log)
         curr_loss = 0.0
@@ -158,15 +159,16 @@ def train(model, optimizer, scheduler, step, train_dataset, eval_dataset, opt, c
         if tb_logger is not None:
             tb_logger.add_scalar("Evaluation", dev_em, step)
             tb_logger.add_scalar("Training", curr_loss / (opt.eval_freq), step)
-        
+
         if not opt.epochs and step > opt.total_steps:
             return
         if not opt.epochs and step > opt.total_steps:
             return
 
     src.util.save(model, optimizer, scheduler, step, best_dev_em,
-                    opt, checkpoint_path, f"epoch-{epoch}")
-        
+                  opt, checkpoint_path, f"epoch-{epoch}")
+
+
 def evaluate(model, dataset, tokenizer, collator, opt, epoch, device, mode='eval'):
     # TF_TOKENS = sum(tokenizer(['no', 'yes'])['input_ids'], [])
     # MC_TOKENS = sum(tokenizer([chr(i + ord('A')) for i in range(12)])['input_ids'], [])
@@ -247,13 +249,13 @@ def evaluate(model, dataset, tokenizer, collator, opt, epoch, device, mode='eval
             loss_tfmc, loss_re = torch.tensor(0.0).cuda(), torch.tensor(0.0).cuda()
 
             re_outputs = results_re.view(-1, results_re.size(-1))
-            
+
             tfmc_outputs = model.generate(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 max_length=10
             )
-            
+
             indices_re = indices[1][:lengths[1]]
             indices_tf = indices[2][:lengths[2]]
             indices_mc = indices[3][:lengths[3]]
@@ -263,14 +265,14 @@ def evaluate(model, dataset, tokenizer, collator, opt, epoch, device, mode='eval
             tf_scores, mc_scores = [], []
             # tf_logits, mc_logits = [], []
             tf_ans, mc_ans = [], []
-            
+
             ans_list = []
-        
+
             # for k, (o, lgs) in enumerate(zip(tfmc_outputs, output_logits)):
             for k, o in enumerate(tfmc_outputs):
- 
+
                 ans = tokenizer.decode(o, skip_special_tokens=True)
-                
+
                 gold = [str(dataset.get_example(idx[k])['answer'])]
                 score = src.evaluation.ems(ans, gold)
                 total += 1
@@ -340,7 +342,6 @@ def evaluate(model, dataset, tokenizer, collator, opt, epoch, device, mode='eval
                 main_list[i] += obj  # extend list to gather
         # tf_em, mc_em, re_em, tf_predictions, mc_predictions, re_predictions, raw_logits, qids, raw_answers = main_list
         tf_em, mc_em, re_em, tf_predictions, mc_predictions, re_predictions, qids, raw_answers = main_list
-            
 
     if mode == 'eval' and not opt.is_distributed:
         if len(tf_em) == 0:
@@ -382,6 +383,7 @@ def evaluate(model, dataset, tokenizer, collator, opt, epoch, device, mode='eval
     exactmatch, total = src.util.weighted_average(np.mean(exactmatch) / 2, total, opt)
     return exactmatch, ans_list
 
+
 def predict(model, dataset, tokenizer, collator, opt, device):
     # TF_TOKENS = sum(tokenizer(['no', 'yes'])['input_ids'], [])
     # MC_TOKENS = sum(tokenizer([chr(i + ord('A')) for i in range(12)])['input_ids'], [])
@@ -401,6 +403,7 @@ def predict(model, dataset, tokenizer, collator, opt, device):
     model = model.module if hasattr(model, "module") else model
     cpu_device = torch.device('cpu')
     raw_logits, qids, raw_answers = [], [], []
+    ans_list = []
     with torch.no_grad():
         pbar = tqdm(dataloader, total=len(dataloader))
         for i, batch in enumerate(pbar):
@@ -459,48 +462,25 @@ def predict(model, dataset, tokenizer, collator, opt, device):
                 return logits, previous_outputs, None, results_re
 
             re_outputs = results_re.view(-1, results_re.size(-1))
-            
+
             tfmc_outputs = model.generate(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 max_length=10
             )
-            
+
             indices_re = indices[1][:lengths[1]]
             indices_tf = indices[2][:lengths[2]]
             indices_mc = indices[3][:lengths[3]]
 
             labels_re = torch.index_select(labels, 0, indices_re)[:, 0].view(-1).detach().to(cpu_device).tolist()
 
-            # tf_logits, mc_logits = [], []
-            tf_ans, mc_ans = [], []
-            
-            ans_list = []
-        
             # for k, (o, lgs) in enumerate(zip(tfmc_outputs, output_logits)):
             for k, o in enumerate(tfmc_outputs):
- 
                 ans = tokenizer.decode(o, skip_special_tokens=True)
-                
-                total += 1
-
-                if k in indices_tf:
-                    tf_ans.append(ans)
-                    tf_predictions.append(ans)
-                    ans_list.append(src.evaluation.normalize_answer(ans))
-
-                elif k in indices_mc:
-                    mc_ans.append(ans)
-                    mc_predictions.append(ans)
-                    ans_list.append(src.evaluation.normalize_answer(ans))
-
-            re_ans = []
-            if len(labels_re) > 0:
-                re_ans = re_outputs.view(-1).detach().to(cpu_device).tolist()
-                for item in re_ans:
-                    ans_list.append(item)
-
+                ans_list.append(ans)
     return ans_list
+
 
 
 if __name__ == "__main__":
@@ -558,7 +538,7 @@ if __name__ == "__main__":
         # load_path = checkpoint_path / 'checkpoint' / 'latest'
         load_path = 'latest'
         model, _, _, opt_checkpoint, step, best_dev_em = \
-            src.util.load(model_class, load_path, opt, reset_params=False)
+            src.util.load(transformers.T5ForConditionalGeneration, load_path, opt, reset_params=False)
         optimizer, scheduler = src.util.set_optim(opt, model)
         logger.info(f"Model loaded from {load_path}")
     else:
@@ -584,4 +564,4 @@ if __name__ == "__main__":
     # )
     ans_list = predict(model, eval_dataset, tokenizer, collator, opt, device)
     ans_array = np.array(ans_list)
-    np.save('my_array.npy', ans_array)
+    np.save('prediction_result.npy', ans_array)
