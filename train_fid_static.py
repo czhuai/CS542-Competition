@@ -168,8 +168,6 @@ def train(model, optimizer, scheduler, step, train_dataset, eval_dataset, opt, c
     src.util.save(model, optimizer, scheduler, step, best_dev_em,
                     opt, checkpoint_path, f"epoch-{epoch}")
         
-
-
 def evaluate(model, dataset, tokenizer, collator, opt, epoch, device, mode='eval'):
     # TF_TOKENS = sum(tokenizer(['no', 'yes'])['input_ids'], [])
     # MC_TOKENS = sum(tokenizer([chr(i + ord('A')) for i in range(12)])['input_ids'], [])
@@ -385,6 +383,124 @@ def evaluate(model, dataset, tokenizer, collator, opt, epoch, device, mode='eval
     exactmatch, total = src.util.weighted_average(np.mean(exactmatch) / 2, total, opt)
     return exactmatch, ans_list
 
+def predict(model, dataset, tokenizer, collator, opt, device):
+    # TF_TOKENS = sum(tokenizer(['no', 'yes'])['input_ids'], [])
+    # MC_TOKENS = sum(tokenizer([chr(i + ord('A')) for i in range(12)])['input_ids'], [])
+
+    sampler = SequentialSampler(dataset)
+    dataloader = DataLoader(dataset,
+                            sampler=sampler,
+                            batch_size=opt.per_gpu_batch_size,
+                            drop_last=False,
+                            # num_workers=2,
+                            collate_fn=collator
+                            )
+    model.eval()
+    total = 0
+    tf_predictions, mc_predictions, re_predictions, my_predictions = [], [], [], []
+    model = model.module if hasattr(model, "module") else model
+    cpu_device = torch.device('cpu')
+    raw_logits, qids, raw_answers = [], [], []
+    with torch.no_grad():
+        pbar = tqdm(dataloader, total=len(dataloader))
+        for i, batch in enumerate(pbar):
+            (idx, ids, labels, indices, lengths, context_ids, context_mask) = batch
+
+            labels = labels.to(device)
+            indices = indices.to(device)
+            lengths = lengths.to(device)
+            input_ids = context_ids.to(device)
+            input_ids = input_ids.view(input_ids.size(0), -1)
+            attention_mask = context_mask.to(device)
+            attention_mask = attention_mask.view(attention_mask.size(0), -1)
+
+            indices_tfmc = indices[0][:lengths[0]]
+            indices_re = indices[1][:lengths[1]]
+            labels_tfmc, labels_re = None, None
+
+            if labels is None:
+                decoder_outputs = model.forward(
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                    labels=labels,
+                    output_hidden_states=True,
+                )
+                hidden_state = decoder_outputs[2][-1]
+                previous_outputs = decoder_outputs[1]
+                logits = decoder_outputs[0]
+            else:
+                labels_tfmc = torch.index_select(labels, 0, indices_tfmc).to(torch.int64)
+                labels_re = torch.index_select(labels, 0, indices_re)
+
+                decoder_labels = copy.deepcopy(labels).to(torch.int64)
+                decoder_labels[indices_re, :] = torch.zeros_like(labels_re).to(torch.int64).to(device)
+                labels_re = labels_re[:, 0].view(-1, 1)  # only takes the first value, as all others are copies
+                decoder_outputs = model.forward(
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                    labels=decoder_labels,
+                    output_hidden_states=True,
+                )
+                hidden_state = decoder_outputs[3][-1]
+                previous_outputs = decoder_outputs[2]
+                logits = decoder_outputs[1]
+
+            # raw_logits.append(logits)
+            regressor = nn.Sequential(
+                nn.Linear(model.config.d_model, 1),
+                nn.Sigmoid()
+            )
+
+            regressor = regressor.to(device)
+
+            results_re = torch.index_select(regressor(hidden_state)[:, 0, :], 0, indices_re)
+
+            if labels is None:
+                return logits, previous_outputs, None, results_re
+
+            re_outputs = results_re.view(-1, results_re.size(-1))
+            
+            tfmc_outputs = model.generate(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                max_length=10
+            )
+            
+            indices_re = indices[1][:lengths[1]]
+            indices_tf = indices[2][:lengths[2]]
+            indices_mc = indices[3][:lengths[3]]
+
+            labels_re = torch.index_select(labels, 0, indices_re)[:, 0].view(-1).detach().to(cpu_device).tolist()
+
+            # tf_logits, mc_logits = [], []
+            tf_ans, mc_ans = [], []
+            
+            ans_list = []
+        
+            # for k, (o, lgs) in enumerate(zip(tfmc_outputs, output_logits)):
+            for k, o in enumerate(tfmc_outputs):
+ 
+                ans = tokenizer.decode(o, skip_special_tokens=True)
+                
+                total += 1
+
+                if k in indices_tf:
+                    tf_ans.append(ans)
+                    tf_predictions.append(ans)
+                    ans_list.append(src.evaluation.normalize_answer(ans))
+
+                elif k in indices_mc:
+                    mc_ans.append(ans)
+                    mc_predictions.append(ans)
+                    ans_list.append(src.evaluation.normalize_answer(ans))
+
+            re_ans = []
+            if len(labels_re) > 0:
+                re_ans = re_outputs.view(-1).detach().to(cpu_device).tolist()
+                for item in re_ans:
+                    ans_list.append(item)
+
+    return ans_list
 
 if __name__ == "__main__":
     options = Options()
@@ -450,19 +566,23 @@ if __name__ == "__main__":
     # model.set_checkpoint(opt.use_checkpoint)
     logger.info(f"NUM EXAMPLE {len(train_dataset)}")
     logger.info("Start training")
-    train(
-        model,
-        optimizer,
-        scheduler,
-        step,
-        train_dataset,
-        eval_dataset,
-        opt,
-        collator,
-        best_dev_em,
-        checkpoint_path,
-        device
-    )
+    # train(
+    #     model,
+    #     optimizer,
+    #     scheduler,
+    #     step,
+    #     train_dataset,
+    #     eval_dataset,
+    #     opt,
+    #     collator,
+    #     best_dev_em,
+    #     checkpoint_path,
+    #     device
+    # )
+    ans_list = predict(model, eval_dataset, tokenizer, collator, opt, device)
+    ans_array = np.array(ans_list)
+    
+    
 
     # logger.info("Start evaluating")
     # evaluate(model, eval_dataset, tokenizer, collator, opt, 100, 'eval')

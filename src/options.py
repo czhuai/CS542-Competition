@@ -45,7 +45,7 @@ class Options():
 
     def add_reader_options(self):
         self.parser.add_argument('--train_data', type=str, default='./autocast/cs542/data/train.json', help='path of train data')
-        self.parser.add_argument('--eval_data', type=str, default='./autocast/cs542/data/test.json', help='path of eval data')
+        self.parser.add_argument('--eval_data', type=str, default='./autocast/cs542/data/autocast_competition_test_set.json', help='path of eval data')
         self.parser.add_argument('--model_size', type=str, default='base')
         self.parser.add_argument('--use_checkpoint', action='store_true', help='use checkpoint in the encoder')
         self.parser.add_argument('--text_maxlength', type=int, default=512, 

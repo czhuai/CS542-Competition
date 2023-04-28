@@ -86,7 +86,8 @@ class Dataset(torch.utils.data.Dataset):
         target = str(self.get_target(example))
 
         # Append available choices for MC questions
-        if (not target[:-5].lower().strip() in ['yes', 'no']) and not isinstance(choices, dict):
+        # if (not target[:-5].lower().strip() in ['yes', 'no']) and not isinstance(choices, dict):
+        if example['qtype'] == 'mc':
             choices = [chr(i + ord('A')) + ': ' + choices[i] for i in range(len(choices))]
             question = question + ' ' + self.choices_prefix + ' ' + ' | '.join(choices) + '.'
         
