@@ -1,4 +1,3 @@
-train_fid_static.py
 # Copyright (c) Facebook, Inc. and its affiliates.
 # All rights reserved.
 #

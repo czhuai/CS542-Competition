@@ -8,6 +8,7 @@ import torch
 import random
 import json
 import numpy as np
+import ast
 
 class Dataset(torch.utils.data.Dataset):
     def __init__(self,
@@ -84,6 +85,8 @@ class Dataset(torch.utils.data.Dataset):
         question = self.question_prefix + " " + example['question']
         choices = example['choices']
         target = str(self.get_target(example))
+
+        choices = ast.literal_eval(choices)
 
         # Append available choices for MC questions
         # if (not target[:-5].lower().strip() in ['yes', 'no']) and not isinstance(choices, dict):
