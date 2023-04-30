@@ -76,7 +76,7 @@ class Dataset(torch.utils.data.Dataset):
         if 'answer' in example:
             if example['qtype'] == 'num':  # if numeric
                 return example['answer'] #+ ' </s>'
-            return random.choice(example['answer']) + ' </s>'
+            return example['answer'] + ' </s>'
         else:
             return None
 
@@ -86,7 +86,7 @@ class Dataset(torch.utils.data.Dataset):
         choices = example['choices']
         target = str(self.get_target(example))
 
-        choices = ast.literal_eval(choices)
+        # choices = ast.literal_eval(choices)
 
         # Append available choices for MC questions
         # if (not target[:-5].lower().strip() in ['yes', 'no']) and not isinstance(choices, dict):
@@ -196,9 +196,13 @@ class Collator(object):
         targets_tokenized = self.tokenizer.batch_encode_plus(
             targets,
             padding='max_length',
-            max_length=self.answer_maxlength if self.answer_maxlength > 0 else None,
+            max_length=self.text_maxlength,
             return_tensors='pt',
-            truncation=True if self.answer_maxlength > 0 else False,
+            truncation=True
+            # padding='max_length',
+            # max_length=self.answer_maxlength if self.answer_maxlength > 0 else None,
+            # return_tensors='pt',
+            # truncation=True if self.answer_maxlength > 0 else False,
         )
         targets_ids = targets_tokenized["input_ids"]
         targets_mask = targets_tokenized["attention_mask"].bool()  # normally it's not used; we will not add regression results in

@@ -245,7 +245,7 @@ def evaluate(model, dataset, tokenizer, collator, opt, epoch, device, mode='eval
                 return logits, previous_outputs, None, results_re
 
             loss_fn_classifier, loss_fn_regressor = CrossEntropyLoss(ignore_index=-100), MSELoss()
-            loss_tfmc, loss_re = torch.tensor(0.0).cuda(), torch.tensor(0.0).cuda()
+            loss_tfmc, loss_re = torch.tensor(0.0), torch.tensor(0.0)
 
             re_outputs = results_re.view(-1, results_re.size(-1))
 
@@ -537,7 +537,7 @@ if __name__ == "__main__":
         # load_path = checkpoint_path / 'checkpoint' / 'latest'
         load_path = 'latest'
         model, _, _, opt_checkpoint, step, best_dev_em = \
-            src.util.load(transformers.T5ForConditionalGeneration, load_path, opt, reset_params=False)
+            src.util.load(model_class, load_path, opt, reset_params=False)
         optimizer, scheduler = src.util.set_optim(opt, model)
         logger.info(f"Model loaded from {load_path}")
     else:
@@ -548,19 +548,19 @@ if __name__ == "__main__":
     # model.set_checkpoint(opt.use_checkpoint)
     logger.info(f"NUM EXAMPLE {len(eval_dataset)}")
     logger.info("Start predicting")
-    # train(
-    #     model,
-    #     optimizer,
-    #     scheduler,
-    #     step,
-    #     train_dataset,
-    #     eval_dataset,
-    #     opt,
-    #     collator,
-    #     best_dev_em,
-    #     checkpoint_path,
-    #     device
-    # )
+    train(
+        model,
+        optimizer,
+        scheduler,
+        step,
+        train_dataset,
+        eval_dataset,
+        opt,
+        collator,
+        best_dev_em,
+        checkpoint_path,
+        device
+    )
     ans_list = predict(model, eval_dataset, tokenizer, collator, opt, device)
     ans_array = np.array(ans_list)
     np.save('prediction_result.npy', ans_array)

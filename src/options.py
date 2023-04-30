@@ -45,7 +45,7 @@ class Options():
 
     def add_reader_options(self):
         self.parser.add_argument('--train_data', type=str, default='./data/train.json', help='path of train data')
-        self.parser.add_argument('--eval_data', type=str, default='./data/autocast_test_set_w_answers.json', help='path of eval data')
+        self.parser.add_argument('--eval_data', type=str, default='./data/test.json', help='path of eval data')
         self.parser.add_argument('--use_checkpoint', action='store_true', help='use checkpoint in the encoder')
         self.parser.add_argument('--text_maxlength', type=int, default=512, 
                         help='maximum number of tokens in text segments (question+passage)')
@@ -103,10 +103,10 @@ class Options():
         self.parser.add_argument('--eval_print_freq', type=int, default=1000,
                         help='print intermdiate results of evaluation every <eval_print_freq> steps')
         
-        self.parser.add_argument('--model_name', type=str, default="T5",
+        self.parser.add_argument('--model_name', type=str, default="RoBERTa",
                         help='model name (T5, RoBERTa, BERT)')
         
-        self.parser.add_argument('--model_size', type=str, default="t5-small", 
+        self.parser.add_argument('--model_size', type=str, default="roberta-base", 
                                  help='T5: t5-small, t5-base, t5-large, t5-3b, t5-11b; \
                                  RoBERTa: roberta-base, roberta-large; \
                                  BERT: bert-base-uncased, bert-large-uncased')
