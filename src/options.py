@@ -103,10 +103,10 @@ class Options():
         self.parser.add_argument('--eval_print_freq', type=int, default=1000,
                         help='print intermdiate results of evaluation every <eval_print_freq> steps')
         
-        self.parser.add_argument('--model_name', type=str, default="RoBERTa",
+        self.parser.add_argument('--model_name', type=str, default="T5",
                         help='model name (T5, RoBERTa, BERT)')
         
-        self.parser.add_argument('--model_size', type=str, default="roberta-base", 
+        self.parser.add_argument('--model_size', type=str, default="t5-small", 
                                  help='T5: t5-small, t5-base, t5-large, t5-3b, t5-11b; \
                                  RoBERTa: roberta-base, roberta-large; \
                                  BERT: bert-base-uncased, bert-large-uncased')

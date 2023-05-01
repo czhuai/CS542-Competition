@@ -79,12 +79,29 @@ class Dataset(torch.utils.data.Dataset):
             return example['answer'] + ' </s>'
         else:
             return None
+        
+    def get_logits_target(self, example):
+        if 'answer' in example:
+            if example['qtype'] == 'num':
+                ans = torch.zeros([38])
+                ans[0] = float(example['answer'])
+                return ans
+            elif example['qtype'] == 'mc':
+                return torch.eye(38)[ord(example['answer']) - ord('A')]
+            else:
+                if(example['answer'] == 'yes'):
+                    # return torch.tensor([1.0, 0.0])
+                    return torch.eye(38)[0]
+                else:
+                    return torch.eye(38)[1]
+                    # return torch.tensor([0.0, 1.0])
 
     def __getitem__(self, index):
         example = self.data[index]
         question = self.question_prefix + " " + example['question']
         choices = example['choices']
         target = str(self.get_target(example))
+        logits_target = self.get_logits_target(example)
 
         # choices = ast.literal_eval(choices)
 
@@ -124,6 +141,7 @@ class Dataset(torch.utils.data.Dataset):
             'target' : target,
             'choices': choices,
             'passages' : passages,
+            'logits_target': logits_target,
             # 'scores' : scores,
         }
 
@@ -167,6 +185,7 @@ class Collator(object):
         ids = [ex['id'] for ex in batch]
         targets = [ex['target'] for ex in batch]
         choices = [ex['choices'] for ex in batch]
+        logits_targets = torch.stack([ex['logits_target'] for ex in batch])
 
         tfmc_indices, re_indices, tf_indices, mc_indices = [], [], [], []
         for i in range(len(targets)):
@@ -195,14 +214,14 @@ class Collator(object):
 
         targets_tokenized = self.tokenizer.batch_encode_plus(
             targets,
-            padding='max_length',
-            max_length=self.text_maxlength,
-            return_tensors='pt',
-            truncation=True
             # padding='max_length',
-            # max_length=self.answer_maxlength if self.answer_maxlength > 0 else None,
+            # max_length=self.text_maxlength,
             # return_tensors='pt',
-            # truncation=True if self.answer_maxlength > 0 else False,
+            # truncation=True
+            padding='max_length',
+            max_length=self.answer_maxlength if self.answer_maxlength > 0 else None,
+            return_tensors='pt',
+            truncation=True if self.answer_maxlength > 0 else False,
         )
         targets_ids = targets_tokenized["input_ids"]
         targets_mask = targets_tokenized["attention_mask"].bool()  # normally it's not used; we will not add regression results in
@@ -235,7 +254,7 @@ class Collator(object):
                                                      self.tokenizer,
                                                      self.text_maxlength)
 
-        return (index, ids, labels, indices, lengths, passage_ids, passage_masks)
+        return (index, ids, labels, indices, lengths, passage_ids, passage_masks, logits_targets)
 
 def load_data(data_path=None, global_rank=-1, world_size=-1):
     assert data_path

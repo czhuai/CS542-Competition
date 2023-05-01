@@ -56,7 +56,7 @@ def train(model, optimizer, scheduler, step, train_dataset, eval_dataset, opt, c
         for i, batch in enumerate(pbar):
             step += 1
             # (_, _, labels, indices, lengths, context_ids, context_mask) = batch
-            (_, _, labels, indices, lengths, context_ids, context_mask) = batch
+            (_, _, labels, indices, lengths, context_ids, context_mask, logits_targets) = batch
 
             input_ids = context_ids.to(device)
             input_ids = input_ids.view(input_ids.size(0), -1)
@@ -66,6 +66,8 @@ def train(model, optimizer, scheduler, step, train_dataset, eval_dataset, opt, c
             indices = indices.to(device)
             indices_tfmc = indices[0][:lengths[0]]
             indices_re = indices[1][:lengths[1]]
+            indices_tf = indices[2][:lengths[2]]
+            indices_mc = indices[3][:lengths[3]]
 
             labels = labels.to(device)
             lengths = lengths.to(device)
@@ -84,6 +86,8 @@ def train(model, optimizer, scheduler, step, train_dataset, eval_dataset, opt, c
             else:
                 labels_tfmc = torch.index_select(labels, 0, indices_tfmc).to(torch.int64).to(device)
                 labels_re = torch.index_select(labels, 0, indices_re).to(device)
+                labels_tf = torch.index_select(logits_targets, 0, indices_tf)
+                labels_mc = torch.index_select(logits_targets, 0, indices_mc)
 
                 decoder_labels = copy.deepcopy(labels).to(torch.int64).to(device)
                 decoder_labels[indices_re, :] = torch.zeros_like(labels_re).to(torch.int64).to(device)
@@ -101,14 +105,40 @@ def train(model, optimizer, scheduler, step, train_dataset, eval_dataset, opt, c
             logits_tfmc = torch.index_select(logits, 0, indices_tfmc)
             logits_tfmc = logits_tfmc.view(-1, logits_tfmc.size(-1))
 
+            logits_tf = torch.index_select(logits, 0, indices_tf)
+            logits_tf = logits_tf.view(-1, logits_tf.size(-1))
+
+            logits_mc = torch.index_select(logits, 0, indices_mc)
+            logits_mc = logits_mc.view(-1, logits_mc.size(-1))
+            
+            tf_regressor = nn.Sequential(
+                nn.Linear(model.config.d_model, 2),
+                nn.Sigmoid()
+            )
+
+            mc_regressor = nn.Sequential(
+                nn.Linear(model.config.d_model, 38),
+                nn.Sigmoid()
+            )
+
             regressor = nn.Sequential(
                 nn.Linear(model.config.d_model, 1),
                 nn.Sigmoid()
             )
 
+            myregressor = nn.Sequential(
+                nn.Linear(model.config.d_model, 38),
+                nn.Sigmoid()
+            )
+
             regressor = regressor.to(device)
+            tf_regressor = tf_regressor.to(device)
+
+            myresult = myregressor(hidden_state)[:, 0, :]
 
             results_re = torch.index_select(regressor(hidden_state)[:, 0, :], 0, indices_re)
+            results_tf = torch.index_select(tf_regressor(hidden_state)[:, 0, :], 0, indices_tf)
+            results_mc = torch.index_select(mc_regressor(hidden_state)[:, 0, :], 0, indices_mc)
 
             if labels is None:
                 return logits, previous_outputs, None, results_re
@@ -119,10 +149,14 @@ def train(model, optimizer, scheduler, step, train_dataset, eval_dataset, opt, c
             # nan loss doesn't impact gradient but TODO: fix problem with logging
             loss_tfmc = loss_fn_classifier(logits_tfmc, labels_tfmc.view(-1))
             loss_re = loss_fn_regressor(results_re.view(-1, results_re.size(-1)), labels_re)
+            # loss_tf = loss_fn_classifier(results_tf, labels_tf)
+            # loss_mc = loss_fn_classifier(results_mc, labels_mc)
+            my_loss = loss_fn_classifier(myresult, logits_targets)
+
 
             batch_size_tfmc = len(labels_tfmc)
             assert batch_size_tfmc + len(labels_re) == len(labels)  # sanity check
-            loss = loss_tfmc + loss_re  # TODO: should we weigh them?
+            loss = loss_tfmc + loss_re + my_loss # TODO: should we weigh them?
 
             loss.backward()
 
@@ -190,7 +224,7 @@ def evaluate(model, dataset, tokenizer, collator, opt, epoch, device, mode='eval
     with torch.no_grad():
         pbar = tqdm(dataloader, total=len(dataloader))
         for i, batch in enumerate(pbar):
-            (idx, ids, labels, indices, lengths, context_ids, context_mask) = batch
+            (idx, ids, labels, indices, lengths, context_ids, context_mask, logits_targets) = batch
 
             labels = labels.to(device)
             indices = indices.to(device)
@@ -217,6 +251,8 @@ def evaluate(model, dataset, tokenizer, collator, opt, epoch, device, mode='eval
             else:
                 labels_tfmc = torch.index_select(labels, 0, indices_tfmc).to(torch.int64)
                 labels_re = torch.index_select(labels, 0, indices_re)
+                # labels_tf = torch.index_select(labels, 0, indices_tf)
+                # labels_mc = torch.index_select(labels, 0, indices_mc)
 
                 decoder_labels = copy.deepcopy(labels).to(torch.int64)
                 decoder_labels[indices_re, :] = torch.zeros_like(labels_re).to(torch.int64).to(device)
